@@ -7,6 +7,7 @@ import TranscriptUpload from "./pages/TranscriptUpload";
 import ChatBot from "./pages/ChatBot";
 import Layout from "./components/Layout";
 import { jsPDF } from "jspdf";
+import InlineChat from "./components/InlineChat";
 
 const tabs = [
   { id: "transcript", label: "Transcript", icon: "📝" },
@@ -169,6 +170,7 @@ function Home() {
         </div>
       ) : (
         <div style={{ maxWidth: "700px" }}>
+          <InlineChat transcript={result.transcript} meetingName={result.filename} />
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "24px" }}>
             <div>
               <h1 style={{ fontSize: "24px", fontWeight: 800, color: "#0f172a", marginBottom: "4px" }}>Meeting Highlights</h1>

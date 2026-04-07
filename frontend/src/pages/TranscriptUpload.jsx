@@ -1,6 +1,7 @@
 import { useState } from "react";
 import Layout from "../components/Layout";
 import { jsPDF } from "jspdf";
+import InlineChat from "../components/InlineChat";
 
 export default function TranscriptUpload() {
   const [file, setFile] = useState(null);
@@ -130,6 +131,7 @@ export default function TranscriptUpload() {
 
       {status === "done" && result && (
         <div style={{ maxWidth: "800px" }}>
+          <InlineChat transcript={result.transcript} meetingName={result.filename} />
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "24px" }}>
             <div>
               <h1 style={{ fontSize: "24px", fontWeight: 800, color: "#0f172a", marginBottom: "4px" }}>Transcript Analysis</h1>

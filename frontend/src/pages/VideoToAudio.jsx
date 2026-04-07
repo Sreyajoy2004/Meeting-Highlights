@@ -1,6 +1,7 @@
 import { useState } from "react";
 import Layout from "../components/Layout";
 import { jsPDF } from "jspdf";
+import InlineChat from "../components/InlineChat";
 
 const tabs = [
   { id: "transcript", label: "Transcript", icon: "📝" },
@@ -112,6 +113,7 @@ export default function VideoToAudio() {
 
       {status === "done" && result && (
         <div style={{ maxWidth: "700px" }}>
+          <InlineChat transcript={result.transcript} meetingName={video?.name} />
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "24px" }}>
             <div>
               <h1 style={{ fontSize: "24px", fontWeight: 800, color: "#0f172a", marginBottom: "4px" }}>Video Highlights</h1>
