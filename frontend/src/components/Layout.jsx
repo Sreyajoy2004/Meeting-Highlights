@@ -4,6 +4,8 @@ const navItems = [
   { path: "/", icon: "🎵", label: "Audio Upload", desc: "Upload & transcribe" },
   { path: "/video-audio", icon: "🎬", label: "Video Upload", desc: "Extract & analyze" },
   { path: "/live", icon: "🔴", label: "Live Meeting", desc: "Record & transcribe" },
+  { path: "/transcript", icon: "📄", label: "Transcript Upload", desc: "Extract decisions & tasks" },
+  { path: "/chat", icon: "💬", label: "Ask Transcript", desc: "Chat with your meetings" },
 ];
 
 export default function Layout({ children }) {

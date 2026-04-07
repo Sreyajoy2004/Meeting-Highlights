@@ -3,6 +3,8 @@ import axios from "axios";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import VideoToAudio from "./pages/VideoToAudio";
 import LiveMeeting from "./pages/LiveMeeting";
+import TranscriptUpload from "./pages/TranscriptUpload";
+import ChatBot from "./pages/ChatBot";
 import Layout from "./components/Layout";
 import { jsPDF } from "jspdf";
 
@@ -191,6 +193,8 @@ function App() {
         <Route path="/" element={<Home />} />
         <Route path="/live" element={<LiveMeeting />} />
         <Route path="/video-audio" element={<VideoToAudio />} />
+        <Route path="/transcript" element={<TranscriptUpload />} />
+        <Route path="/chat" element={<ChatBot />} />
       </Routes>
     </BrowserRouter>
   );

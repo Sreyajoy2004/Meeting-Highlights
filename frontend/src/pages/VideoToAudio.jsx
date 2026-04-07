@@ -28,10 +28,16 @@ export default function VideoToAudio() {
     try {
       setStatus("processing"); setResult(null);
       const res = await fetch("http://127.0.0.1:5000/process-video", { method: "POST", body: formData });
-      if (!res.ok) throw new Error();
       const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data?.error || "Unknown server error");
+      }
       setResult(data); setStatus("done"); setActiveTab("transcript");
-    } catch { alert("Error processing video. Please try again."); setStatus("idle"); }
+    } catch (err) {
+      console.error("Video upload failed:", err);
+      alert(`Error processing video: ${err.message || "Please try again."}`);
+      setStatus("idle");
+    }
   };
 
   const handleReset = () => { setVideo(null); setResult(null); setStatus("idle"); };

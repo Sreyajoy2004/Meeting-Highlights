@@ -9,12 +9,13 @@ from dotenv import load_dotenv
 load_dotenv()
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
-FFMPEG = r"C:\Users\Amal\AppData\Local\Microsoft\WinGet\Links\ffmpeg.exe"
+FFMPEG = "ffmpeg"
+FFPROBE = "ffprobe"
 CHUNK_MINUTES = 10
 
 def get_duration(file_path):
     result = subprocess.run(
-        [FFMPEG.replace("ffmpeg.exe", "ffprobe.exe"), "-v", "error", "-show_entries",
+        [FFPROBE, "-v", "error", "-show_entries",
          "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", file_path],
         capture_output=True, text=True
     )

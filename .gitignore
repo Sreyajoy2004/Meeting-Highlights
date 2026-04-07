@@ -4,3 +4,16 @@ backend/uploads/
 backend/.env
 frontend/node_modules/
 frontend/build/
+backend/venv/
+backend/__pycache__/
+backend/uploads/
+backend/.env
+
+frontend/node_modules/
+frontend/build/
+
+venv/
+__pycache__/
+*.pyc
+.env
+*.log

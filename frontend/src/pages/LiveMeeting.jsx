@@ -2,7 +2,6 @@ import { useState, useRef, useEffect } from "react";
 import Layout from "../components/Layout";
 import { jsPDF } from "jspdf";
 
-const CHUNK_INTERVAL = 5000; // reduced to 5s for more frequent updates
 const tabs = [
   { id: "transcript", label: "Transcript", icon: "📝" },
   { id: "summary", label: "Summary", icon: "📋" },
@@ -13,6 +12,7 @@ export default function LiveMeeting() {
   const [status, setStatus] = useState("idle");
   const [seconds, setSeconds] = useState(0);
   const [liveTranscript, setLiveTranscript] = useState("");
+  const [interimText, setInterimText] = useState("");
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
   const [screenSharing, setScreenSharing] = useState(false);
@@ -21,115 +21,139 @@ export default function LiveMeeting() {
   const videoRef = useRef(null);
   const transcriptRef = useRef(null);
   const streamRef = useRef(null);
-  const fullRecorderRef = useRef(null);
-  const fullChunksRef = useRef([]);
   const timerRef = useRef(null);
-  const chunkIntervalRef = useRef(null);
-  const liveTranscriptRef = useRef(""); // keep latest value accessible in async callbacks
+  const recognitionRef = useRef(null);
+  const liveTranscriptRef = useRef("");
+  const screenStreamRef = useRef(null);
 
   useEffect(() => { startCamera(); return () => cleanup(); }, []);
+
   useEffect(() => {
     liveTranscriptRef.current = liveTranscript;
-    if (transcriptRef.current) transcriptRef.current.scrollTop = transcriptRef.current.scrollHeight;
+    if (transcriptRef.current)
+      transcriptRef.current.scrollTop = transcriptRef.current.scrollHeight;
   }, [liveTranscript]);
 
   const startCamera = async () => {
     try {
-      const micStream = await navigator.mediaDevices.getUserMedia({
-        video: true,
-        audio: { noiseSuppression: true, echoCancellation: true, autoGainControl: true, sampleRate: 16000 }
-      });
-      const audioContext = new AudioContext();
-      const dest = audioContext.createMediaStreamDestination();
-      audioContext.createMediaStreamSource(micStream).connect(dest);
-      const mixed = new MediaStream([...micStream.getVideoTracks(), ...dest.stream.getAudioTracks()]);
-      mixed._micStream = micStream; mixed._screenStream = null; mixed._audioContext = audioContext; mixed._dest = dest;
-      streamRef.current = mixed;
-      if (videoRef.current) videoRef.current.srcObject = micStream;
-    } catch { setError("Camera/microphone access denied."); }
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      streamRef.current = stream;
+      if (videoRef.current) videoRef.current.srcObject = stream;
+    } catch {
+      setError("Camera/microphone access denied.");
+    }
   };
 
   const toggleScreenShare = async () => {
     if (screenSharing) {
-      streamRef.current?._screenStream?.getTracks().forEach(t => t.stop());
-      streamRef.current._screenStream = null;
+      screenStreamRef.current?.getTracks().forEach(t => t.stop());
+      screenStreamRef.current = null;
       setScreenSharing(false);
       return;
     }
     try {
-      const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
-      if (screenStream.getAudioTracks().length > 0)
-        streamRef.current._audioContext.createMediaStreamSource(screenStream).connect(streamRef.current._dest);
-      streamRef.current._screenStream = screenStream;
-      screenStream.getVideoTracks()[0].onended = () => { setScreenSharing(false); streamRef.current._screenStream = null; };
+      const screen = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+      screenStreamRef.current = screen;
+      screen.getVideoTracks()[0].onended = () => { setScreenSharing(false); screenStreamRef.current = null; };
       setScreenSharing(true);
     } catch {}
   };
 
   const cleanup = () => {
-    streamRef.current?._micStream?.getTracks().forEach(t => t.stop());
-    streamRef.current?._screenStream?.getTracks().forEach(t => t.stop());
-    streamRef.current?._audioContext?.close();
-    clearInterval(timerRef.current); clearInterval(chunkIntervalRef.current);
+    streamRef.current?.getTracks().forEach(t => t.stop());
+    screenStreamRef.current?.getTracks().forEach(t => t.stop());
+    clearInterval(timerRef.current);
+    stopSpeechRecognition();
+  };
+
+  const startSpeechRecognition = () => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      setError("Speech recognition not supported in this browser. Use Chrome.");
+      return;
+    }
+    const recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = "en-US";
+
+    recognition.onresult = (e) => {
+      let interim = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const transcript = e.results[i][0].transcript;
+        if (e.results[i].isFinal) {
+          setLiveTranscript(prev => {
+            const updated = prev ? prev + " " + transcript.trim() : transcript.trim();
+            liveTranscriptRef.current = updated;
+            return updated;
+          });
+          setInterimText("");
+        } else {
+          interim += transcript;
+        }
+      }
+      setInterimText(interim);
+    };
+
+    recognition.onerror = (e) => {
+      if (e.error !== "no-speech") console.warn("Speech recognition error:", e.error);
+    };
+
+    // Auto-restart on end while still recording
+    recognition.onend = () => {
+      if (recognitionRef.current === recognition) recognition.start();
+    };
+
+    recognition.start();
+    recognitionRef.current = recognition;
+  };
+
+  const stopSpeechRecognition = () => {
+    if (recognitionRef.current) {
+      recognitionRef.current.onend = null; // prevent auto-restart
+      recognitionRef.current.stop();
+      recognitionRef.current = null;
+    }
+    setInterimText("");
   };
 
   const startRecording = () => {
-    if (!streamRef.current) return;
-    fullChunksRef.current = [];
-    const fullMR = new MediaRecorder(streamRef.current, { mimeType: "video/webm" });
-    fullMR.ondataavailable = (e) => { if (e.data.size > 0) fullChunksRef.current.push(e.data); };
-    fullMR.start(1000);
-    fullRecorderRef.current = fullMR;
-    setStatus("recording"); setSeconds(0); setLiveTranscript(""); liveTranscriptRef.current = "";
+    setStatus("recording");
+    setSeconds(0);
+    setLiveTranscript("");
+    setInterimText("");
+    liveTranscriptRef.current = "";
     timerRef.current = setInterval(() => setSeconds(s => s + 1), 1000);
-    // Send first chunk immediately after 5s, then every 5s
-    chunkIntervalRef.current = setInterval(() => sendAudioChunk(), CHUNK_INTERVAL);
+    startSpeechRecognition();
   };
 
-  const sendAudioChunk = () => {
-    if (!streamRef.current) return;
-    const audioStream = new MediaStream(streamRef.current.getAudioTracks());
-    const chunkMR = new MediaRecorder(audioStream, { mimeType: "audio/webm" });
-    const chunkData = [];
-    chunkMR.ondataavailable = (e) => { if (e.data.size > 0) chunkData.push(e.data); };
-    chunkMR.onstop = async () => {
-      const blob = new Blob(chunkData, { type: "audio/webm" });
-      if (blob.size < 500) return;
-      const formData = new FormData();
-      formData.append("audio", blob, "chunk.webm");
-      try {
-        const res = await fetch("http://127.0.0.1:5000/transcribe-chunk", { method: "POST", body: formData });
-        const data = await res.json();
-        if (data.text?.trim()) {
-          setLiveTranscript(prev => prev ? prev + "\n" + data.text.trim() : data.text.trim());
-        }
-      } catch {}
-    };
-    chunkMR.start();
-    setTimeout(() => { if (chunkMR.state === "recording") chunkMR.stop(); }, CHUNK_INTERVAL - 300);
-  };
-
-  const stopRecording = () => {
-    clearInterval(timerRef.current); clearInterval(chunkIntervalRef.current);
+  const stopRecording = async () => {
+    clearInterval(timerRef.current);
+    stopSpeechRecognition();
     setStatus("processing");
-    fullRecorderRef.current.stop();
-    fullRecorderRef.current.onstop = () => processVideo();
-  };
 
-  const processVideo = async () => {
-    const blob = new Blob(fullChunksRef.current, { type: "video/webm" });
-    const formData = new FormData();
-    formData.append("video", blob, "meeting.webm");
+    const transcript = liveTranscriptRef.current.trim();
+    if (!transcript) {
+      setError("No speech detected. Please try again.");
+      setStatus("idle");
+      return;
+    }
+
     try {
-      const res = await fetch("http://127.0.0.1:5000/process-video", { method: "POST", body: formData });
+      const res = await fetch("http://127.0.0.1:5000/process-live", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ transcript }),
+      });
       if (!res.ok) throw new Error();
       const data = await res.json();
-      // Use live transcript if backend transcript is empty/short
-      if (liveTranscriptRef.current && (!data.transcript || data.transcript.length < liveTranscriptRef.current.length)) {
-        data.transcript = liveTranscriptRef.current;
-      }
-      setResult(data); setStatus("done"); setActiveTab("transcript");
-    } catch { setError("Error processing meeting."); setStatus("idle"); }
+      setResult(data);
+      setStatus("done");
+      setActiveTab("transcript");
+    } catch {
+      setError("Error processing meeting.");
+      setStatus("idle");
+    }
   };
 
   const handleDownloadPDF = () => {
@@ -142,7 +166,10 @@ export default function LiveMeeting() {
       doc.text(title, margin, y); y += 8;
       doc.setDrawColor(16, 185, 129); doc.line(margin, y, pageWidth - margin, y); y += 8;
       doc.setFontSize(10); doc.setFont("helvetica", "normal"); doc.setTextColor(50, 50, 50);
-      doc.splitTextToSize(body, maxWidth).forEach(line => { if (y > 275) { doc.addPage(); y = 20; } doc.text(line, margin, y); y += 6; }); y += 10;
+      doc.splitTextToSize(body, maxWidth).forEach(line => {
+        if (y > 275) { doc.addPage(); y = 20; }
+        doc.text(line, margin, y); y += 6;
+      }); y += 10;
     };
     doc.setFontSize(18); doc.setFont("helvetica", "bold"); doc.setTextColor(15, 23, 42);
     doc.text("Meeting Highlights", margin, y); y += 6;
@@ -167,7 +194,7 @@ export default function LiveMeeting() {
             <div style={{ position: "absolute", inset: "36px", borderRadius: "50%", background: "linear-gradient(135deg, #10b981, #059669)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "22px", animation: "breathe 2s ease-in-out infinite" }}>🎙️</div>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: "12px", width: "260px" }}>
-            {[{ label: "Extracting audio", icon: "🎬", color: "#10b981" }, { label: "Transcribing speech", icon: "🎧", color: "#f59e0b" }, { label: "Generating highlights", icon: "✅", color: "#38bdf8" }].map((step, i) => (
+            {[{ label: "Processing transcript", icon: "📝", color: "#10b981" }, { label: "Generating summary", icon: "📋", color: "#f59e0b" }, { label: "Extracting action items", icon: "✅", color: "#38bdf8" }].map((step, i) => (
               <div key={i} style={{ display: "flex", alignItems: "center", gap: "12px", background: "#ffffff", borderRadius: "12px", padding: "12px 16px", border: `1px solid ${step.color}30`, animation: "slideUp 0.4s ease forwards", animationDelay: `${i * 0.15}s`, opacity: 0 }}>
                 <div style={{ width: "32px", height: "32px", borderRadius: "8px", background: `${step.color}18`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "15px" }}>{step.icon}</div>
                 <span style={{ fontSize: "13px", fontWeight: 600, color: "#334155", flex: 1 }}>{step.label}</span>
@@ -183,7 +210,7 @@ export default function LiveMeeting() {
         <div>
           <div style={{ marginBottom: "24px" }}>
             <h1 style={{ fontSize: "28px", fontWeight: 800, color: "#0f172a", letterSpacing: "-0.5px", marginBottom: "6px" }}>Live Meeting</h1>
-            <p style={{ color: "#64748b", fontSize: "14px" }}>Record your meeting with live transcription of all participants.</p>
+            <p style={{ color: "#64748b", fontSize: "14px" }}>Record your meeting with real-time transcription.</p>
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", alignItems: "start" }}>
@@ -197,7 +224,11 @@ export default function LiveMeeting() {
                     <span style={{ color: "#fff", fontSize: "12px", fontWeight: 700 }}>REC {fmt(seconds)}</span>
                   </div>
                 )}
-                {error && <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(15,23,42,0.85)" }}><p style={{ color: "#f87171", fontSize: "13px", textAlign: "center", padding: "20px" }}>{error}</p></div>}
+                {error && (
+                  <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(15,23,42,0.85)" }}>
+                    <p style={{ color: "#f87171", fontSize: "13px", textAlign: "center", padding: "20px" }}>{error}</p>
+                  </div>
+                )}
               </div>
               <div style={{ padding: "18px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                 <div>
@@ -224,14 +255,21 @@ export default function LiveMeeting() {
                 {status === "recording" && (
                   <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                     <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#10b981", animation: "pulse 1.2s infinite" }} />
-                    <span style={{ fontSize: "11px", color: "#10b981", fontWeight: 600 }}>Updates every 5s</span>
+                    <span style={{ fontSize: "11px", color: "#10b981", fontWeight: 600 }}>Listening...</span>
                   </div>
                 )}
               </div>
               <div ref={transcriptRef} style={{ flex: 1, overflowY: "auto", fontSize: "13px", lineHeight: 1.8, color: "#334155", maxHeight: "260px" }}>
-                {liveTranscript
-                  ? <p style={{ whiteSpace: "pre-wrap" }}>{liveTranscript}</p>
-                  : <p style={{ color: "#cbd5e1", fontStyle: "italic", fontSize: "13px" }}>{status === "recording" ? "Listening... first update in ~5 seconds." : "Start recording to see live transcript."}</p>}
+                {(liveTranscript || interimText) ? (
+                  <p style={{ whiteSpace: "pre-wrap" }}>
+                    {liveTranscript}
+                    {interimText && <span style={{ color: "#94a3b8", fontStyle: "italic" }}>{liveTranscript ? " " : ""}{interimText}</span>}
+                  </p>
+                ) : (
+                  <p style={{ color: "#cbd5e1", fontStyle: "italic", fontSize: "13px" }}>
+                    {status === "recording" ? "Listening... start speaking." : "Start recording to see live transcript."}
+                  </p>
+                )}
               </div>
               {status === "recording" && (
                 <div style={{ marginTop: "14px", display: "flex", gap: "6px" }}>
@@ -252,7 +290,7 @@ export default function LiveMeeting() {
             </div>
             <div style={{ display: "flex", gap: "10px" }}>
               <button onClick={handleDownloadPDF} style={{ background: "linear-gradient(135deg, #10b981, #059669)", border: "none", borderRadius: "10px", padding: "10px 18px", fontSize: "13px", fontWeight: 700, color: "#fff", cursor: "pointer", boxShadow: "0 4px 12px rgba(16,185,129,0.3)" }}>⬇ PDF</button>
-              <button onClick={() => { setStatus("idle"); setResult(null); setSeconds(0); setLiveTranscript(""); startCamera(); }} style={{ background: "#f1f5f9", border: "1px solid #e2e8f0", borderRadius: "10px", padding: "10px 18px", fontSize: "13px", fontWeight: 600, color: "#64748b", cursor: "pointer" }}>↩ New</button>
+              <button onClick={() => { setStatus("idle"); setResult(null); setSeconds(0); setLiveTranscript(""); setError(null); startCamera(); }} style={{ background: "#f1f5f9", border: "1px solid #e2e8f0", borderRadius: "10px", padding: "10px 18px", fontSize: "13px", fontWeight: 600, color: "#64748b", cursor: "pointer" }}>↩ New</button>
             </div>
           </div>
 
@@ -266,17 +304,17 @@ export default function LiveMeeting() {
             ))}
           </div>
 
-          {/* Tabs */}
           <div style={{ display: "flex", gap: "4px", background: "#e2e8f0", borderRadius: "14px", padding: "5px", marginBottom: "14px" }}>
             {tabs.map((tab) => (
               <button key={tab.id} onClick={() => setActiveTab(tab.id)} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", padding: "11px", borderRadius: "10px", border: "none", fontSize: "13px", fontWeight: 600, cursor: "pointer", transition: "all 0.2s", background: activeTab === tab.id ? "#ffffff" : "transparent", color: activeTab === tab.id ? "#0f172a" : "#64748b", boxShadow: activeTab === tab.id ? "0 2px 8px rgba(0,0,0,0.12)" : "none" }}>
                 {tab.icon} {tab.label}
-                {tab.id === "actions" && result.action_items?.length > 0 && <span style={{ background: activeTab === tab.id ? "rgba(16,185,129,0.2)" : "#cbd5e1", color: activeTab === tab.id ? "#10b981" : "#64748b", borderRadius: "999px", padding: "1px 8px", fontSize: "11px", fontWeight: 700 }}>{result.action_items.length}</span>}
+                {tab.id === "actions" && result.action_items?.length > 0 && (
+                  <span style={{ background: activeTab === tab.id ? "rgba(16,185,129,0.2)" : "#cbd5e1", color: activeTab === tab.id ? "#10b981" : "#64748b", borderRadius: "999px", padding: "1px 8px", fontSize: "11px", fontWeight: 700 }}>{result.action_items.length}</span>
+                )}
               </button>
             ))}
           </div>
 
-          {/* Content */}
           <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "20px", padding: "28px", minHeight: "260px", boxShadow: "0 2px 8px rgba(0,0,0,0.05)" }}>
             <p style={{ fontSize: "10px", fontWeight: 700, color: "#94a3b8", letterSpacing: "2px", textTransform: "uppercase", marginBottom: "18px" }}>{tabs.find(t => t.id === activeTab)?.label}</p>
             {activeTab === "transcript" && <p style={{ color: "#334155", lineHeight: 1.9, fontSize: "14px", whiteSpace: "pre-wrap" }}>{result.transcript}</p>}
