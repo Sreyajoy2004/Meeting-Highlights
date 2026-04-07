@@ -1,5 +1,6 @@
 import os
-from groq import Groq
+import time
+from groq import Groq, RateLimitError
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -9,16 +10,24 @@ client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 MAX_CHARS = 12000  # faster
 
 
-def _chat(prompt):
-    try:
-        response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[{"role": "user", "content": prompt}]
-        )
-        return response.choices[0].message.content.strip()
-    except Exception as e:
-        print("Groq error:", e)
-        return "Error generating response"
+def _chat(prompt, retries=3):
+    for attempt in range(retries):
+        try:
+            response = client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[{"role": "user", "content": prompt}]
+            )
+            return response.choices[0].message.content.strip()
+        except RateLimitError as e:
+            import re
+            match = re.search(r'try again in (\d+\.?\d*)s', str(e))
+            wait = float(match.group(1)) + 1 if match else 20 * (attempt + 1)
+            print(f"Rate limit hit, waiting {wait:.1f}s... (attempt {attempt+1}/{retries})")
+            time.sleep(wait)
+        except Exception as e:
+            print("Groq error:", e)
+            raise
+    raise Exception("Rate limit exceeded after retries. Please wait a moment and try again.")
 
 
 def _chunk_text(text, max_chars=MAX_CHARS):
@@ -93,53 +102,63 @@ def extract_structured_action_items(transcript):
     return all_items
 
 
-def chat_with_transcript(question, transcript, meeting_name):
-    """Answer a question about a transcript with cited excerpts."""
+def chat_with_transcript(question, transcript, meeting_name, history=None):
+    """Answer a question about a transcript with conversation history and cited sources."""
     if not transcript or not question:
         return {"answer": "No transcript provided.", "citations": []}
 
     import re
-    sentences = re.split(r'(?<=[.!?])\s+', transcript.strip())
-    segment_size = 4
-    segments = []
-    for i in range(0, len(sentences), segment_size):
-        seg = " ".join(sentences[i:i + segment_size]).strip()
-        if seg:
-            segments.append({"id": i // segment_size + 1, "text": seg})
 
-    q_words = set(re.sub(r'[^\w\s]', '', question.lower()).split())
-    stopwords = {"what", "who", "why", "how", "when", "did", "was", "were", "the", "a", "an",
-                 "is", "are", "in", "on", "at", "to", "of", "and", "or", "for", "with", "that"}
-    q_words -= stopwords
+    # Trim transcript to fit within token limits (~12000 chars)
+    transcript_context = transcript[:12000] if len(transcript) > 12000 else transcript
 
-    def score(seg):
-        words = set(re.sub(r'[^\w\s]', '', seg["text"].lower()).split())
-        return len(q_words & words)
+    # Build conversation messages with full history
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                f"You are an AI assistant that answers questions about a meeting transcript.\n"
+                f"Meeting: {meeting_name}\n\n"
+                f"FULL TRANSCRIPT:\n{transcript_context}\n\n"
+                f"Instructions:\n"
+                f"1. Answer accurately using only the transcript above.\n"
+                f"2. Use conversation history to understand follow-up questions.\n"
+                f"3. After your answer, output a SOURCES block in exactly this format:\n"
+                f"SOURCES:\n"
+                f"- Speaker Name (Role) – what they said or decided [timestamp if present]\n"
+                f"4. Extract speaker name, role, timestamp directly from the transcript.\n"
+                f"5. If no role is mentioned, write name only without parentheses.\n"
+                f"6. If the answer is not in the transcript, say so and output SOURCES: None."
+            )
+        }
+    ]
 
-    ranked = sorted(segments, key=score, reverse=True)
-    top = ranked[:5] if len(ranked) >= 5 else ranked
-    top = sorted(top, key=lambda s: s["id"])
+    # Add previous conversation turns
+    for turn in (history or []):
+        if turn.get("role") in ("user", "assistant") and turn.get("content"):
+            messages.append({"role": turn["role"], "content": turn["content"]})
 
-    context = "\n\n".join([f"[Segment {s['id']}]: {s['text']}" for s in top])
+    # Add current question
+    messages.append({"role": "user", "content": question})
 
-    prompt = (
-        f"You are an AI assistant answering questions about a meeting transcript.\n"
-        f"Meeting: {meeting_name}\n\n"
-        f"Relevant transcript segments:\n{context}\n\n"
-        f"Question: {question}\n\n"
-        f"Instructions:\n"
-        f"1. Write a clear, concise answer based only on the transcript above.\n"
-        f"2. After the answer, output a SOURCES block in exactly this format (one line per source):\n"
-        f"SOURCES:\n"
-        f"- Speaker Name (Role) – brief quote or point they made [timestamp if present, else omit]\n"
-        f"- Speaker Name (Role) – brief quote or point they made [timestamp if present, else omit]\n"
-        f"3. Extract speaker name, role, and timestamp directly from the transcript text if available.\n"
-        f"4. If a speaker has no role mentioned, write their name only without parentheses.\n"
-        f"5. If the answer is not in the transcript, say so clearly and output SOURCES: None."
-    )
+    # Call Groq with full message history
+    for attempt in range(3):
+        try:
+            response = client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=messages
+            )
+            raw = response.choices[0].message.content.strip()
+            break
+        except RateLimitError as e:
+            match = re.search(r'try again in (\d+\.?\d*)s', str(e))
+            wait = float(match.group(1)) + 1 if match else 20 * (attempt + 1)
+            print(f"Rate limit, waiting {wait:.1f}s...")
+            time.sleep(wait)
+    else:
+        raise Exception("Rate limit exceeded after retries. Please wait a moment and try again.")
 
-    raw = _chat(prompt)
-
+    # Parse answer and SOURCES block
     answer = raw
     citations = []
 
@@ -147,13 +166,11 @@ def chat_with_transcript(question, transcript, meeting_name):
         parts = raw.split("SOURCES:", 1)
         answer = parts[0].strip()
         sources_block = parts[1].strip()
-
         if sources_block.lower() != "none":
             for line in sources_block.split("\n"):
                 line = line.strip().lstrip("- ").strip()
                 if not line:
                     continue
-                # Extract timestamp like [00:01:40]
                 ts_match = re.search(r'\[(\d{2}:\d{2}(?::\d{2})?)\]', line)
                 timestamp = ts_match.group(0) if ts_match else ""
                 line_clean = re.sub(r'\[\d{2}:\d{2}(?::\d{2})?\]', '', line).strip()

@@ -223,11 +223,12 @@ def chat():
         question = (data or {}).get("question", "").strip()
         transcript = (data or {}).get("transcript", "").strip()
         meeting_name = (data or {}).get("meeting_name", "Meeting").strip()
+        history = (data or {}).get("history", [])
         if not question:
             return jsonify({"error": "No question provided"}), 400
         if not transcript:
             return jsonify({"error": "No transcript provided"}), 400
-        result = chat_with_transcript(question, transcript, meeting_name)
+        result = chat_with_transcript(question, transcript, meeting_name, history)
         return jsonify(result)
     except Exception as e:
         import traceback

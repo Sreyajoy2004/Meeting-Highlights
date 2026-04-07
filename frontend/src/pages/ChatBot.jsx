@@ -15,7 +15,10 @@ export default function ChatBot() {
   const chatEndRef = useRef(null);
   const inputRef = useRef(null);
 
+  const messagesRef = useRef([]);
+
   useEffect(() => {
+    messagesRef.current = messages;
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
@@ -80,17 +83,24 @@ export default function ChatBot() {
     setMessages(prev => [...prev, { role: "user", text: q }]);
     setLoading(true);
 
+    // Use ref to get latest messages — avoids stale closure bug
+    const currentMessages = messagesRef.current;
+    const history = currentMessages
+      .slice(1) // skip welcome message
+      .filter(m => m.role === "user" || m.role === "assistant")
+      .map(m => ({ role: m.role, content: m.text }));
+
     try {
       const res = await fetch("http://127.0.0.1:5000/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question: q, transcript, meeting_name: meetingName || "Meeting" })
+        body: JSON.stringify({ question: q, transcript, meeting_name: meetingName || "Meeting", history })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Server error");
       setMessages(prev => [...prev, { role: "assistant", text: data.answer, citations: data.citations || [] }]);
     } catch (err) {
-      setMessages(prev => [...prev, { role: "assistant", text: `Error: ${err.message}`, citations: [] }]);
+      setMessages(prev => [...prev, { role: "assistant", text: `⚠️ ${err.message}`, citations: [] }]);
     } finally {
       setLoading(false);
       setTimeout(() => inputRef.current?.focus(), 100);
