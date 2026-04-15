@@ -210,18 +210,19 @@ export default function LiveMeeting() {
 
       {(status === "idle" || status === "recording") && (
         <div>
-          <div style={{ marginBottom: "24px" }}>
-            <h1 style={{ fontSize: "28px", fontWeight: 800, color: "#001F3F", letterSpacing: "-0.5px", marginBottom: "6px" }}>Live Meeting</h1>
-            <p style={{ color: "#3A6B85", fontSize: "14px" }}>Record your meeting with real-time transcription.</p>
+          <div style={{ marginBottom: "16px" }}>
+            <h1 style={{ fontSize: "24px", fontWeight: 800, color: "#001F3F", letterSpacing: "-0.5px", marginBottom: "4px" }}>Live Meeting</h1>
+            <p style={{ color: "#3A6B85", fontSize: "13px" }}>Record your meeting with real-time transcription.</p>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", alignItems: "start" }}>
+          {/* Always single column — video top, transcript bottom */}
+          <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
             {/* Webcam */}
-            <div style={{ background: "#ffffff", border: "1px solid #D6EAF8", borderRadius: "20px", overflow: "hidden", boxShadow: "0 2px 8px rgba(0,0,0,0.05)" }}>
+            <div style={{ background: "#ffffff", border: "1px solid #D6EAF8", borderRadius: "16px", overflow: "hidden", boxShadow: "0 2px 8px rgba(0,0,0,0.05)" }}>
               <div style={{ position: "relative", background: "#001F3F", aspectRatio: "4/3" }}>
                 <video ref={videoRef} autoPlay muted playsInline style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
                 {status === "recording" && (
-                  <div style={{ position: "absolute", top: "12px", left: "12px", display: "flex", alignItems: "center", gap: "7px", background: "rgba(0,0,0,0.65)", backdropFilter: "blur(8px)", borderRadius: "999px", padding: "5px 12px" }}>
+                  <div style={{ position: "absolute", top: "10px", left: "10px", display: "flex", alignItems: "center", gap: "6px", background: "rgba(0,0,0,0.65)", backdropFilter: "blur(8px)", borderRadius: "999px", padding: "4px 10px" }}>
                     <div style={{ width: "7px", height: "7px", borderRadius: "50%", background: "#ef4444", animation: "pulse 1s infinite" }} />
                     <span style={{ color: "#fff", fontSize: "12px", fontWeight: 700 }}>REC {fmt(seconds)}</span>
                   </div>
@@ -232,27 +233,28 @@ export default function LiveMeeting() {
                   </div>
                 )}
               </div>
-              <div style={{ padding: "18px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              {/* Buttons row */}
+              <div style={{ padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px" }}>
                 <div>
                   <p style={{ fontSize: "13px", fontWeight: 600, color: "#001F3F", marginBottom: "2px" }}>{status === "recording" ? "Recording..." : "Ready"}</p>
-                  <p style={{ fontSize: "11px", color: "#5A8FA8" }}>{status === "recording" ? `${fmt(seconds)} elapsed` : "Click Start to begin"}</p>
+                  <p style={{ fontSize: "11px", color: "#5A8FA8" }}>{status === "recording" ? `${fmt(seconds)} elapsed` : "Tap Start to begin"}</p>
                 </div>
                 <div style={{ display: "flex", gap: "8px" }}>
-                  <button onClick={toggleScreenShare} style={{ background: screenSharing ? "linear-gradient(135deg, #FFC872, #E6A830)" : "#EBF5FF", border: "1px solid #D6EAF8", borderRadius: "10px", padding: "10px 14px", fontSize: "12px", fontWeight: 700, color: screenSharing ? "#fff" : "#3A6B85", cursor: "pointer" }}>
-                    {screenSharing ? "🖥️ Sharing" : "🖥️ Share"}
+                  <button onClick={toggleScreenShare} style={{ background: screenSharing ? "linear-gradient(135deg, #FFC872, #E6A830)" : "#EBF5FF", border: "1px solid #D6EAF8", borderRadius: "10px", padding: "12px 14px", fontSize: "13px", fontWeight: 700, color: screenSharing ? "#fff" : "#3A6B85", cursor: "pointer" }}>
+                    🖥️
                   </button>
                   {status === "idle" ? (
-                    <button onClick={startRecording} style={{ background: "linear-gradient(135deg, #006BBB, #30A0E0)", border: "none", borderRadius: "10px", padding: "10px 20px", fontSize: "13px", fontWeight: 700, color: "#fff", cursor: "pointer", boxShadow: "0 4px 12px rgba(0,107,187,0.35)" }}>▶ Start</button>
+                    <button onClick={startRecording} style={{ background: "linear-gradient(135deg, #006BBB, #30A0E0)", border: "none", borderRadius: "10px", padding: "12px 24px", fontSize: "14px", fontWeight: 700, color: "#fff", cursor: "pointer", boxShadow: "0 4px 12px rgba(0,107,187,0.35)" }}>▶ Start</button>
                   ) : (
-                    <button onClick={stopRecording} style={{ background: "linear-gradient(135deg, #ef4444, #dc2626)", border: "none", borderRadius: "10px", padding: "10px 20px", fontSize: "13px", fontWeight: 700, color: "#fff", cursor: "pointer", boxShadow: "0 4px 12px rgba(239,68,68,0.35)" }}>⏹ Stop</button>
+                    <button onClick={stopRecording} style={{ background: "linear-gradient(135deg, #ef4444, #dc2626)", border: "none", borderRadius: "10px", padding: "12px 24px", fontSize: "14px", fontWeight: 700, color: "#fff", cursor: "pointer", boxShadow: "0 4px 12px rgba(239,68,68,0.35)" }}>⏹ Stop</button>
                   )}
                 </div>
               </div>
             </div>
 
             {/* Live transcript */}
-            <div style={{ background: "#ffffff", border: "1px solid #D6EAF8", borderRadius: "20px", padding: "20px", boxShadow: "0 2px 8px rgba(0,0,0,0.05)", display: "flex", flexDirection: "column", minHeight: "320px" }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "14px" }}>
+            <div style={{ background: "#ffffff", border: "1px solid #D6EAF8", borderRadius: "16px", padding: "16px", boxShadow: "0 2px 8px rgba(0,0,0,0.05)", display: "flex", flexDirection: "column", minHeight: "200px" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
                 <p style={{ fontSize: "10px", fontWeight: 700, color: "#5A8FA8", letterSpacing: "2px", textTransform: "uppercase" }}>Live Transcript</p>
                 {status === "recording" && (
                   <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
@@ -261,7 +263,7 @@ export default function LiveMeeting() {
                   </div>
                 )}
               </div>
-              <div ref={transcriptRef} style={{ flex: 1, overflowY: "auto", fontSize: "13px", lineHeight: 1.8, color: "#1A3A52", maxHeight: "260px" }}>
+              <div ref={transcriptRef} style={{ flex: 1, overflowY: "auto", fontSize: "14px", lineHeight: 1.8, color: "#1A3A52", maxHeight: "220px" }}>
                 {(liveTranscript || interimText) ? (
                   <p style={{ whiteSpace: "pre-wrap" }}>
                     {liveTranscript}
@@ -274,7 +276,7 @@ export default function LiveMeeting() {
                 )}
               </div>
               {status === "recording" && (
-                <div style={{ marginTop: "14px", display: "flex", gap: "6px" }}>
+                <div style={{ marginTop: "12px", display: "flex", gap: "6px" }}>
                   {[0, 1, 2, 3].map(i => <div key={i} style={{ flex: 1, height: "3px", borderRadius: "999px", background: "#006BBB", animation: "wave 1s ease-in-out infinite", animationDelay: `${i * 0.15}s` }} />)}
                 </div>
               )}
