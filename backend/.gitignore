@@ -1,0 +1,12 @@
+*.mp3
+*.mp4
+*.webm
+*.ogg
+*.wav
+*.m4a
+uploads/*
+!uploads/.gitkeep
+__pycache__/
+*.pyc
+.env
+test_err.log

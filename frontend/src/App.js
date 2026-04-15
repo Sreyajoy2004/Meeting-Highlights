@@ -111,7 +111,7 @@ function Home() {
     formData.append("file", file);
     try {
       setLoading(true); setResult(null);
-      const response = await axios.post(`${API_BASE}/process-audio`, formData, { headers: { "Content-Type": "multipart/form-data" } });
+      const response = await axios.post(API_BASE + "/process-audio", formData, { headers: { "Content-Type": "multipart/form-data" } });
       setResult(response.data); setActiveTab("transcript");
     } catch { alert("Error processing audio. Please try again."); }
     finally { setLoading(false); }
