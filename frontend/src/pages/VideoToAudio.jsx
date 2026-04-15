@@ -1,3 +1,4 @@
+import API_BASE from "../config";
 import { useState } from "react";
 import Layout from "../components/Layout";
 import { jsPDF } from "jspdf";
@@ -28,7 +29,7 @@ export default function VideoToAudio() {
     formData.append("video", video);
     try {
       setStatus("processing"); setResult(null);
-      const res = await fetch("http://127.0.0.1:5000/process-video", { method: "POST", body: formData });
+      const res = await fetch(`${API_BASE}/process-video`, { method: "POST", body: formData });
       const data = await res.json();
       if (!res.ok) {
         throw new Error(data?.error || "Unknown server error");

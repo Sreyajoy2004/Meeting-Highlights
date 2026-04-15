@@ -1,3 +1,4 @@
+import API_BASE from "../config";
 import { useState, useRef, useEffect } from "react";
 import Layout from "../components/Layout";
 import { jsPDF } from "jspdf";
@@ -141,7 +142,7 @@ export default function LiveMeeting() {
     }
 
     try {
-      const res = await fetch("http://127.0.0.1:5000/process-live", {
+      const res = await fetch(`${API_BASE}/process-live`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ transcript }),

@@ -1,3 +1,4 @@
+import API_BASE from "../config";
 import { useState } from "react";
 import Layout from "../components/Layout";
 import { jsPDF } from "jspdf";
@@ -23,7 +24,7 @@ export default function TranscriptUpload() {
     formData.append("file", file);
     try {
       setStatus("processing"); setResult(null); setError(null);
-      const res = await fetch("http://127.0.0.1:5000/process-transcript", { method: "POST", body: formData });
+      const res = await fetch(`${API_BASE}/process-transcript`, { method: "POST", body: formData });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "Server error");
       setResult(data); setStatus("done"); setActiveTab("actions");

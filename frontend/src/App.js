@@ -1,3 +1,4 @@
+import API_BASE from "./config";
 import React, { useState } from "react";
 import axios from "axios";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
@@ -110,7 +111,7 @@ function Home() {
     formData.append("file", file);
     try {
       setLoading(true); setResult(null);
-      const response = await axios.post("http://127.0.0.1:5000/process-audio", formData, { headers: { "Content-Type": "multipart/form-data" } });
+      const response = await axios.post(`${API_BASE}/process-audio`, formData, { headers: { "Content-Type": "multipart/form-data" } });
       setResult(response.data); setActiveTab("transcript");
     } catch { alert("Error processing audio. Please try again."); }
     finally { setLoading(false); }

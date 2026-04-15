@@ -20,7 +20,7 @@ from utils.extractor import generate_summary, extract_action_items, extract_deci
 FFMPEG_PATH = "ffmpeg"
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, origins=["http://localhost:3000", "http://127.0.0.1:3000", os.getenv("FRONTEND_URL", "*")])
 
 UPLOAD_FOLDER = "uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)

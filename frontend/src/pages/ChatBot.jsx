@@ -1,3 +1,4 @@
+import API_BASE from "../config";
 import { useState, useRef, useEffect } from "react";
 import Layout from "../components/Layout";
 
@@ -35,7 +36,7 @@ export default function ChatBot() {
       try {
         const formData = new FormData();
         formData.append("file", file);
-        const res = await fetch("http://127.0.0.1:5000/extract-pdf", { method: "POST", body: formData });
+        const res = await fetch(`${API_BASE}/extract-pdf`, { method: "POST", body: formData });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Failed to extract PDF");
         setTranscript(data.text);
@@ -91,7 +92,7 @@ export default function ChatBot() {
       .map(m => ({ role: m.role, content: m.text }));
 
     try {
-      const res = await fetch("http://127.0.0.1:5000/chat", {
+      const res = await fetch(`${API_BASE}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ question: q, transcript, meeting_name: meetingName || "Meeting", history })
